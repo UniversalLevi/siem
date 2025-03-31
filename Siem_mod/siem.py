@@ -5,6 +5,7 @@ from datetime import datetime
 from scapy.all import sniff, TCP, UDP, IP, Raw
 from collections import defaultdict
 import threading
+import subprocess
 
 # Constants - Use absolute paths
 SIEM_LOGS_DIR = "/var/log/siem_logs"
@@ -185,6 +186,9 @@ def detect_attack(pkt):
 
     traffic_features = calculate_traffic_features(src_ip, dst_ip, proto, service, pkt)
 
+    if attack_type != "Normal":
+        block_ip(src_ip)  # Block the source IP if an attack is detected
+
     return {
         "s_no": None, "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"), "duration": round(duration, 2),
         "protocol_type": proto, "src_ip": src_ip, "src_port": src_port if TCP in pkt or UDP in pkt else 0,
@@ -210,6 +214,16 @@ def process_packet(pkt):
     detection = detect_attack(pkt)
     detection["s_no"] = s_no
     log_to_csv(LOG_FILE, detection)
+
+def block_ip(ip):
+    """Block the given IP address using UFW."""
+    try:
+        command = f"sudo ufw deny from {ip}"
+        subprocess.run(command, shell=True, check=True)
+        console_alert(f"Blocked IP {ip} due to detected attack", "WARNING")
+    except Exception as e:
+        console_alert(f"Failed to block IP {ip}: {str(e)}", "ERROR")
+
 if __name__ == "__main__":
     init_csv()
     print("Starting SIEM packet capture...")

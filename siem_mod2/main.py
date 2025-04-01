@@ -22,6 +22,9 @@ os.makedirs(SIEM_LOGS_DIR, exist_ok=True)
 # Load settings from configuration file
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "settings.conf")
 
+# API configuration
+API_CONFIG_FILE = os.path.join(SCRIPT_DIR, "api_config.json")
+
 def load_config():
     """Load settings from the config file"""
     config = {}
@@ -33,6 +36,32 @@ def load_config():
                     key, value = line.split("=", 1)
                     config[key.strip()] = value.strip()
     return config
+
+def save_api_config(api_endpoint, api_key):
+    """Save API configuration to a JSON file"""
+    config = {
+        "API_ENDPOINT": api_endpoint,
+        "API_KEY": api_key
+    }
+    with open(API_CONFIG_FILE, "w") as file:
+        json.dump(config, file, indent=4)
+    console_alert(f"API configuration saved to {API_CONFIG_FILE}", "INFO")
+
+def get_api_config():
+    """Get API configuration from user input"""
+    print("\n=== API Configuration Setup ===")
+    print("Please enter the API endpoint and API key for sending logs data to your server.")
+    api_endpoint = input("API Endpoint (e.g., http://192.168.1.100:3000/api/logs): ")
+    api_key = input("API Key (leave blank if not required): ")
+    
+    # Validate endpoint
+    if not api_endpoint.startswith(("http://", "https://")):
+        api_endpoint = "http://" + api_endpoint
+    
+    # Save configuration
+    save_api_config(api_endpoint, api_key)
+    
+    return api_endpoint, api_key
 
 def display_menu():
     """Display the main menu"""
@@ -122,15 +151,19 @@ def convert_csv_to_json():
         except Exception as e2:
             console_alert(f"Both conversion methods failed: {str(e2)}", "ERROR")
 
-def start_logs_sender():
+def start_logs_sender(api_endpoint, api_key):
     """Start the send_logs.py script to send logs to API."""
     try:
         script_path = os.path.join(SCRIPT_DIR, "send_logs.py")
-        # Start the process in the background
-        process = subprocess.Popen([sys.executable, script_path], 
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE)
-        console_alert("Started logs sender process in background", "INFO")
+        # Start the process in the background with API config as arguments
+        process = subprocess.Popen([
+            sys.executable, 
+            script_path, 
+            "--api_endpoint", api_endpoint,
+            "--api_key", api_key
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        console_alert(f"Started logs sender process for API endpoint: {api_endpoint}", "INFO")
         return process
     except Exception as e:
         console_alert(f"Failed to start logs sender: {str(e)}", "ERROR")
@@ -140,6 +173,11 @@ def main():
     """Main function to start SIEM."""
     try:
         display_greeting()
+        
+        # Get API configuration from user
+        api_endpoint, api_key = get_api_config()
+        console_alert(f"API configured to send logs to: {api_endpoint}", "INFO")
+        
         init_csv()
         config = load_config()
         
@@ -160,8 +198,8 @@ def main():
         # Convert CSV to JSON at startup
         csv_to_json.convert_csv_to_json()
         
-        # Start the logs sender process
-        logs_sender_process = start_logs_sender()
+        # Start the logs sender process with API configuration
+        logs_sender_process = start_logs_sender(api_endpoint, api_key)
         
         # Instead of interactive menu, automatically run security checks and enforcement
         console_alert("Automatically running security checks...", "INFO")

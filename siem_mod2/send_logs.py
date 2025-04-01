@@ -5,9 +5,9 @@ import requests
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-# Configuration - replace with your actual API endpoint
-API_ENDPOINT = "https://your-server.com/api/siem-data"
-API_KEY = "your-api-key"  # If your API requires authentication
+# Configuration
+API_ENDPOINT = "http://192.168.190.129:3000/api/logs"
+API_KEY = "your-secret-api-key"  # If your API requires authentication
 
 # Path to the logs file
 SIEM_LOGS_DIR = "/var/log/siem_logs"
@@ -65,10 +65,17 @@ if __name__ == "__main__":
     # Ensure the directory exists
     os.makedirs(os.path.dirname(JSON_FILE), exist_ok=True)
     
+    print(f"Logs directory: {SIEM_LOGS_DIR}")
+    print(f"Watching for changes to: {JSON_FILE}")
+    print(f"Will send data to API at: {API_ENDPOINT}")
+    
     # If the file exists on startup, send it immediately
     if os.path.exists(JSON_FILE):
+        print(f"Found existing log file, sending initial data...")
         handler = LogFileHandler()
         handler.send_logs_to_api()
+    else:
+        print(f"No log file found at {JSON_FILE}. Will wait for it to be created.")
     
     # Start monitoring for changes
     start_monitoring() 

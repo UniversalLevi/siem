@@ -122,6 +122,20 @@ def convert_csv_to_json():
         except Exception as e2:
             console_alert(f"Both conversion methods failed: {str(e2)}", "ERROR")
 
+def start_logs_sender():
+    """Start the send_logs.py script to send logs to API."""
+    try:
+        script_path = os.path.join(SCRIPT_DIR, "send_logs.py")
+        # Start the process in the background
+        process = subprocess.Popen([sys.executable, script_path], 
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+        console_alert("Started logs sender process in background", "INFO")
+        return process
+    except Exception as e:
+        console_alert(f"Failed to start logs sender: {str(e)}", "ERROR")
+        return None
+
 def main():
     """Main function to start SIEM."""
     try:
@@ -146,6 +160,9 @@ def main():
         # Convert CSV to JSON at startup
         csv_to_json.convert_csv_to_json()
         
+        # Start the logs sender process
+        logs_sender_process = start_logs_sender()
+        
         # Instead of interactive menu, automatically run security checks and enforcement
         console_alert("Automatically running security checks...", "INFO")
         run_security_checks(config, silent=False)
@@ -169,6 +186,12 @@ def main():
             console_alert("Shutting down SIEM...", "INFO")
             # Run csv_to_json.py on shutdown
             convert_csv_to_json()
+            
+            # Terminate the logs sender process if it's running
+            if logs_sender_process:
+                logs_sender_process.terminate()
+                console_alert("Terminated logs sender process", "INFO")
+                
             console_alert("SIEM shutdown complete.", "INFO")
                 
     except Exception as e:

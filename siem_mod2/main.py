@@ -49,10 +49,26 @@ def save_api_config(api_endpoint, api_key):
 
 def get_api_config():
     """Get API configuration from user input"""
+    # Default values
+    default_endpoint = "http://192.168.1.116:3000/api/logs"
+    default_key = "your-secure-api-key"
+    
     print("\n=== API Configuration Setup ===")
-    print("Please enter the API endpoint and API key for sending logs data to your server.")
-    api_endpoint = input("API Endpoint (e.g., http://192.168.1.100:3000/api/logs): ")
-    api_key = input("API Key (leave blank if not required): ")
+    print(f"Default API Endpoint: {default_endpoint}")
+    print(f"Default API Key: {default_key}")
+    print("Press Enter to use defaults, or provide your own values.")
+    
+    api_endpoint = input(f"API Endpoint [{default_endpoint}]: ")
+    api_key = input(f"API Key [{default_key}]: ")
+    
+    # Use defaults if nothing provided
+    if not api_endpoint.strip():
+        api_endpoint = default_endpoint
+        print(f"Using default API endpoint: {default_endpoint}")
+    
+    if not api_key.strip():
+        api_key = default_key
+        print(f"Using default API key: {default_key}")
     
     # Validate endpoint
     if not api_endpoint.startswith(("http://", "https://")):
@@ -154,14 +170,56 @@ def convert_csv_to_json():
 def start_logs_sender(api_endpoint, api_key):
     """Start the send_logs.py script to send logs to API."""
     try:
+        # Check for required dependencies
+        try:
+            import urllib3
+            import pyinotify
+        except ImportError as e:
+            missing_package = str(e).split("'")[1]
+            console_alert(f"Missing dependency: {missing_package}. Please install with 'sudo pip install {missing_package}'", "ERROR")
+            if missing_package == "urllib3":
+                console_alert("urllib3 is required for sending logs to API.", "INFO")
+            elif missing_package == "pyinotify":
+                console_alert("pyinotify is required for file monitoring on Ubuntu/Linux.", "INFO")
+            return None
+            
         script_path = os.path.join(SCRIPT_DIR, "send_logs.py")
+        
+        # Check if we're already running as root/admin
+        is_root = os.geteuid() == 0 if hasattr(os, 'geteuid') else False
+        
+        # Determine command based on platform and privilege
+        if os.name == 'posix' and not is_root:  # Unix-like systems (Linux, macOS)
+            console_alert("Starting logs sender with sudo permissions...", "INFO")
+            cmd = [
+                'sudo', sys.executable, 
+                script_path, 
+                "--api_endpoint", api_endpoint,
+                "--api_key", api_key
+            ]
+        else:  # Either Windows or already running as root
+            cmd = [
+                sys.executable, 
+                script_path, 
+                "--api_endpoint", api_endpoint,
+                "--api_key", api_key
+            ]
+        
         # Start the process in the background with API config as arguments
-        process = subprocess.Popen([
-            sys.executable, 
-            script_path, 
-            "--api_endpoint", api_endpoint,
-            "--api_key", api_key
-        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(
+            cmd, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            universal_newlines=True  # Get text output instead of bytes
+        )
+        
+        # Wait a moment to check for immediate errors
+        time.sleep(1)
+        if process.poll() is not None:  # Process has terminated
+            stdout, stderr = process.communicate()
+            if process.returncode != 0:
+                console_alert(f"Logs sender failed to start: {stderr}", "ERROR")
+                return None
         
         console_alert(f"Started logs sender process for API endpoint: {api_endpoint}", "INFO")
         return process

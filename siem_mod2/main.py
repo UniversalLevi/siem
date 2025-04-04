@@ -41,7 +41,8 @@ def save_api_config(api_endpoint, api_key):
     """Save API configuration to a JSON file"""
     config = {
         "API_ENDPOINT": api_endpoint,
-        "API_KEY": api_key
+        "API_KEY": api_key,
+        "NOTE": "The X-API-Key header is hardcoded to 'your-secure-api-key' in send_logs.py"
     }
     with open(API_CONFIG_FILE, "w") as file:
         json.dump(config, file, indent=4)
@@ -51,33 +52,27 @@ def get_api_config():
     """Get API configuration from user input"""
     # Default values
     default_endpoint = "http://192.168.1.116:3000/api/logs"
-    default_key = "your-secure-api-key"
     
     print("\n=== API Configuration Setup ===")
     print(f"Default API Endpoint: {default_endpoint}")
-    print(f"Default API Key: {default_key}")
-    print("Press Enter to use defaults, or provide your own values.")
+    print(f"Note: API key is hardcoded as 'your-secure-api-key' in the X-API-Key header")
+    print("Press Enter to use default endpoint, or provide your own value.")
     
     api_endpoint = input(f"API Endpoint [{default_endpoint}]: ")
-    api_key = input(f"API Key [{default_key}]: ")
     
-    # Use defaults if nothing provided
+    # Use default if nothing provided
     if not api_endpoint.strip():
         api_endpoint = default_endpoint
         print(f"Using default API endpoint: {default_endpoint}")
-    
-    if not api_key.strip():
-        api_key = default_key
-        print(f"Using default API key: {default_key}")
     
     # Validate endpoint
     if not api_endpoint.startswith(("http://", "https://")):
         api_endpoint = "http://" + api_endpoint
     
     # Save configuration
-    save_api_config(api_endpoint, api_key)
+    save_api_config(api_endpoint, "your-secure-api-key")
     
-    return api_endpoint, api_key
+    return api_endpoint
 
 def display_menu():
     """Display the main menu"""
@@ -167,7 +162,7 @@ def convert_csv_to_json():
         except Exception as e2:
             console_alert(f"Both conversion methods failed: {str(e2)}", "ERROR")
 
-def start_logs_sender(api_endpoint, api_key):
+def start_logs_sender(api_endpoint):
     """Start the send_logs.py script to send logs to API."""
     try:
         # Check for required dependencies
@@ -188,22 +183,26 @@ def start_logs_sender(api_endpoint, api_key):
         # Check if we're already running as root/admin
         is_root = os.geteuid() == 0 if hasattr(os, 'geteuid') else False
         
-        # Determine command based on platform and privilege
-        if os.name == 'posix' and not is_root:  # Unix-like systems (Linux, macOS)
-            console_alert("Starting logs sender with sudo permissions...", "INFO")
-            cmd = [
-                'sudo', sys.executable, 
-                script_path, 
-                "--api_endpoint", api_endpoint,
-                "--api_key", api_key
-            ]
-        else:  # Either Windows or already running as root
-            cmd = [
-                sys.executable, 
-                script_path, 
-                "--api_endpoint", api_endpoint,
-                "--api_key", api_key
-            ]
+        # Command to run the send_logs script, we always run it as a regular user now
+        cmd = [
+            sys.executable, 
+            script_path, 
+            "--api_endpoint", api_endpoint
+        ]
+        
+        # If running with sudo, set up the proper permissions for the logs directory
+        if is_root:
+            console_alert("Setting up log directory permissions for regular user access...", "INFO")
+            # Import send_logs module to use its setup function
+            sys.path.append(SCRIPT_DIR)
+            try:
+                import send_logs
+                logs_dir = send_logs.setup_log_access()
+                console_alert(f"Log directory configured at: {logs_dir}", "INFO")
+            except Exception as e:
+                console_alert(f"Failed to configure log directory: {str(e)}", "ERROR")
+        
+        console_alert("Starting logs sender process...", "INFO")
         
         # Start the process in the background with API config as arguments
         process = subprocess.Popen(
@@ -233,7 +232,7 @@ def main():
         display_greeting()
         
         # Get API configuration from user
-        api_endpoint, api_key = get_api_config()
+        api_endpoint = get_api_config()
         console_alert(f"API configured to send logs to: {api_endpoint}", "INFO")
         
         init_csv()
@@ -257,7 +256,7 @@ def main():
         csv_to_json.convert_csv_to_json()
         
         # Start the logs sender process with API configuration
-        logs_sender_process = start_logs_sender(api_endpoint, api_key)
+        logs_sender_process = start_logs_sender(api_endpoint)
         
         # Instead of interactive menu, automatically run security checks and enforcement
         console_alert("Automatically running security checks...", "INFO")

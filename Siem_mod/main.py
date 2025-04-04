@@ -128,10 +128,50 @@ def send_logs_interactive():
     """Run the send_logs module's main function."""
     try:
         console_alert("Running send logs functionality...", "INFO")
-        send_logs.main()
-        console_alert("Send logs operation completed.", "INFO")
+        
+        # Load config to get API settings
+        config = load_config()
+        api_url = config.get("API_URL")
+        api_key = config.get("API_KEY")
+        
+        if not api_url or not api_key:
+            console_alert("API_URL or API_KEY not found in settings.conf. Falling back to interactive mode.", "WARNING")
+            success = send_logs.main()
+        else:
+            console_alert(f"Sending logs to {api_url}...", "INFO")
+            success = send_logs.main(api_url, api_key)
+            
+        if success:
+            console_alert("Send logs operation completed successfully.", "INFO")
+        else:
+            console_alert("Send logs operation failed.", "WARNING")
     except Exception as e:
         console_alert(f"Error sending logs: {str(e)}", "ERROR")
+
+def periodic_log_sender():
+    """Send logs periodically in the background."""
+    try:
+        time.sleep(60)  # Wait a minute after startup
+        while True:
+            try:
+                # Load config to get latest API settings
+                config = load_config()
+                api_url = config.get("API_URL")
+                api_key = config.get("API_KEY")
+                
+                if api_url and api_key:
+                    console_alert("Performing periodic log sending...", "INFO")
+                    send_logs.main(api_url, api_key)
+                else:
+                    console_alert("API_URL or API_KEY not configured for automatic log sending.", "WARNING")
+                    
+                # Sleep for 15 minutes before next attempt
+                time.sleep(900)
+            except Exception as e:
+                console_alert(f"Error in periodic log sender: {str(e)}", "ERROR")
+                time.sleep(300)  # Sleep for 5 minutes on error
+    except Exception as e:
+        console_alert(f"Periodic log sender terminated: {str(e)}", "ERROR")
 
 def main():
     """Main function to start SIEM."""
@@ -153,6 +193,9 @@ def main():
 
         # Start packet sniffer in a separate thread
         sniffer_thread = start_thread(packet_sniffer)
+        
+        # Start the periodic log sender in a separate thread
+        log_sender_thread = start_thread(periodic_log_sender)
         
         # Convert CSV to JSON at startup
         csv_to_json.convert_csv_to_json()

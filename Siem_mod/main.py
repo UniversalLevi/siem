@@ -11,6 +11,7 @@ import json
 import sys
 from check_security import *
 from enforce_security import *
+import send_logs  # Import the send_logs module
 
 # Get the script's directory and log directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,8 +40,9 @@ def display_menu():
     print("\n=== Security Management Tool ===")
     print("1. Check Security Status")
     print("2. Enforce Security Measures")
-    print("3. Exit")
-    return input("Select an option (1-3): ")
+    print("3. Send Logs to Remote Server")
+    print("4. Exit")
+    return input("Select an option (1-4): ")
 
 def run_security_checks(config, silent=False):
     """Run security checks based on config settings"""
@@ -122,6 +124,15 @@ def convert_csv_to_json():
         except Exception as e2:
             console_alert(f"Both conversion methods failed: {str(e2)}", "ERROR")
 
+def send_logs_interactive():
+    """Run the send_logs module's main function."""
+    try:
+        console_alert("Running send logs functionality...", "INFO")
+        send_logs.main()
+        console_alert("Send logs operation completed.", "INFO")
+    except Exception as e:
+        console_alert(f"Error sending logs: {str(e)}", "ERROR")
+
 def main():
     """Main function to start SIEM."""
     try:
@@ -157,6 +168,8 @@ def main():
                 elif choice == "2":
                     run_security_enforcement(config)
                 elif choice == "3":
+                    send_logs_interactive()
+                elif choice == "4":
                     running = False
                     console_alert("Shutting down SIEM...", "INFO")
                     # Run csv_to_json.py on shutdown
